@@ -83,6 +83,12 @@ def read_table(sql, params=()):
         return None
 
 
+def db_usable():
+    """True only if the database file exists and its parts table can be read."""
+    parts = read_table("SELECT part_id FROM parts LIMIT 1")
+    return parts is not None and not parts.empty
+
+
 def money(value):
     try:
         return f"${float(value):,.0f}" if float(value).is_integer() else f"${float(value):,.2f}"
@@ -204,7 +210,9 @@ if reset_clicked:
 
 if run_clicked:
     module = "agent" if mode == "Agent" else "rules"
-    if module not in backend:
+    if not db_usable():
+        st.session_state["flash"] = ("warning", "Press Reset demo first. The demo data isn't loaded yet.")
+    elif module not in backend:
         st.session_state["flash"] = ("warning", f"backend not ready: {module}")
     else:
         # The crash switch is read by the backend from CRASH_AFTER_ORDERS (SPEC section 7).
@@ -235,7 +243,7 @@ if run_clicked:
                 os.environ["CRASH_AFTER_ORDERS"] = previous_crash
 
 # --- Data ------------------------------------------------------------------
-db_ready = DB_PATH.exists()
+db_ready = db_usable()
 orders = read_table(
     "SELECT po_id, idempotency_key, part_id, supplier_id, offer_id, qty, unit_price, "
     "shipping, total, status, approved_by, created_at FROM purchase_orders"
