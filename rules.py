@@ -436,13 +436,19 @@ def _decide(po_id, new_status, approver):
     run_id = audit.new_run_id("owner")
     conn = db.connect()
     try:
+        conn.execute("BEGIN IMMEDIATE")  # one decision at a time: a double click can't approve twice
         po = conn.execute("SELECT * FROM purchase_orders WHERE po_id = ?", (po_id,)).fetchone()
         if po is None:
             raise ValueError(f"No order {po_id}")
         if po["status"] != "pending_approval":
-            raise ValueError(f"{po_id} is {po['status']}, not waiting for approval")
-        conn.execute("UPDATE purchase_orders SET status = ?, approved_by = ? WHERE po_id = ?",
-                     (new_status, approver, po_id))
+            done = {"placed": "already approved", "rejected": "already rejected"}.get(po["status"], po["status"])
+            raise ValueError(f"{po_id} was {done}")
+        changed = conn.execute(
+            "UPDATE purchase_orders SET status = ?, approved_by = ? WHERE po_id = ? AND status = 'pending_approval'",
+            (new_status, approver, po_id),
+        ).rowcount
+        if changed != 1:
+            raise ValueError(f"{po_id} is no longer waiting for approval")
         data = {"po_id": po_id, "supplier_id": po["supplier_id"], "total": po["total"],
                 "approved_by": approver}
         if new_status == "placed":
