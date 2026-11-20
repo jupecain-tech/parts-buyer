@@ -1,0 +1,7 @@
+# Never show a raw traceback on screen (it may be on a projector).
+# Full details still print in the terminal that runs streamlit.
+[client]
+showErrorDetails = "none"
+
+[browser]
+gatherUsageStats = false
