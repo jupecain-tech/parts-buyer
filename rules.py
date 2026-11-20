@@ -393,6 +393,12 @@ def place_order(part_id, offer_id, qty, run_id, spend_limit=None):
 
     conn = db.connect()
     try:
+        conn.execute("BEGIN IMMEDIATE")  # duplicate check, PO number and insert happen as one step
+        o = _order_for_key(conn, key)                                        # R7 check 1, under the lock
+        if o:
+            conn.rollback()
+            return {"status": "exists", "po_id": o["po_id"],
+                    "reason": SKIP_MESSAGES[o["status"]].format(po_id=o["po_id"])}
         po_id = _next_po_id(conn)
         row_data = {"po_id": po_id, "idempotency_key": key, "supplier_id": offer["supplier_id"],
                     "offer_id": offer_id, "qty": qty, "unit_price": unit_price, "shipping": shipping,
@@ -405,9 +411,11 @@ def place_order(part_id, offer_id, qty, run_id, spend_limit=None):
                 (po_id, key, part_id, offer["supplier_id"], offer_id, qty, unit_price, shipping,
                  total, status, None, audit.now_iso()),
             )
-        except sqlite3.IntegrityError:                                       # R7 check 2
+        except sqlite3.IntegrityError as exc:                                # R7 check 2
             conn.rollback()
             o = _order_for_key(conn, key)
+            if o is None:
+                return {"status": "refused", "po_id": None, "reason": f"could not save the order ({exc})"}
             return {"status": "exists", "po_id": o["po_id"],
                     "reason": SKIP_MESSAGES[o["status"]].format(po_id=o["po_id"])}
 
