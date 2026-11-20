@@ -168,6 +168,12 @@ audit = read_table(
 )
 names = read_table("SELECT part_id, name FROM parts")
 part_names = dict(zip(names["part_id"], names["name"])) if names is not None else {}
+sups = read_table("SELECT supplier_id, name FROM suppliers")
+supplier_names = dict(zip(sups["supplier_id"], sups["name"])) if sups is not None else {}
+
+
+def supplier_label(sid):
+    return str(supplier_names.get(sid, sid)).replace(" (mock)", "")
 
 # Top row of numbers
 if audit is not None and not audit.empty:
@@ -219,9 +225,51 @@ with tab_inv:
         except Exception as exc:
             st.warning(f"backend not ready: rules ({exc})")
 
-# Approvals (next step)
+# Approvals
+def decide(action, po_id, part_id):
+    """Button callback: runs before the page redraws, so the numbers refresh at once."""
+    try:
+        getattr(backend["rules"], f"{action}_order")(po_id)
+        verb = "approved and placed" if action == "approve" else "rejected"
+        st.session_state["flash"] = ("success", f"{po_id} for {part_id} {verb}.")
+    except Exception as exc:
+        st.session_state["flash"] = ("error", f"Could not {action} {po_id}: {exc}")
+
+
 with tab_appr:
-    st.caption("Coming next: a card per order waiting on the owner, with Approve / Reject.")
+    pending = (
+        orders[orders["status"] == "pending_approval"].sort_values("created_at")
+        if orders is not None and not orders.empty
+        else None
+    )
+    if not db_ready:
+        st.info("Press Reset demo")
+    elif pending is None or pending.empty:
+        st.success("Nothing waiting on you.")
+    else:
+        rules_ready = not backend_note("rules")
+        for _, po in pending.iterrows():
+            pid = po["part_id"]
+            part_log = audit[audit["part_id"] == pid] if audit is not None else pd.DataFrame()
+            notes = part_log[part_log["step"] == "agent_note"]["message"] if not part_log.empty else []
+            asked = part_log[part_log["step"] == "approval_requested"]["message"] if not part_log.empty else []
+            explanation = (
+                notes.iloc[-1] if len(notes) else asked.iloc[-1] if len(asked) else "No explanation logged."
+            )
+            with st.container(border=True):
+                st.markdown(f"#### {pid} {part_names.get(pid, '')}  ·  {money(po['total'])}")
+                st.markdown(
+                    f"{int(po['qty'])} from **{supplier_label(po['supplier_id'])}** at "
+                    f"{money(po['unit_price'])} each + {money(po['shipping'])} shipping. "
+                    f"This is over your {money(spend_limit)} spending limit, so it needs you."
+                )
+                st.markdown(f"> {plain_english(explanation)}")
+                st.caption(f"{po['po_id']} · created {po['created_at']}")
+                a, r, _ = st.columns([1, 1, 4])
+                a.button("Approve", key=f"approve_{po['po_id']}", type="primary", disabled=not rules_ready,
+                         on_click=decide, args=("approve", po["po_id"], pid))
+                r.button("Reject", key=f"reject_{po['po_id']}", disabled=not rules_ready,
+                         on_click=decide, args=("reject", po["po_id"], pid))
 
 # Orders (next step)
 with tab_orders:
