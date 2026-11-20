@@ -28,13 +28,15 @@ rules.py
 - `get_inventory_status() -> [dict]`: part_id, name, on_hand, reserved, on_order, available,
   reorder_point, status (OK / Short / Ordered / Awaiting approval), order_today.
 - `get_spend_limit(override=None) -> float`: override, else Statsig (config_flags), else SPEND_LIMIT in .env.
+- `get_spend_limit_with_source(override=None) -> (limit, source)`: source is "app", "Statsig" or ".env". The agent should
+  call this ONCE per run and pass both values to place_order, so the audit trail names where the limit came from.
 - `evaluate_part(part_id, run_id, spend_limit=None) -> dict`: qty, deadline, eligible_offers
   (ranked by landed cost, each with offer_id, supplier_id, landed), rejected (offer_id,
   supplier_id, reason), needs_buying, existing_order, action. Logs gap_found and
   rejected_option rows (or checked / skipped when nothing needs buying).
 - `recheck_offer(offer_id, qty, run_id) -> dict`: offer_id, supplier_id, live_stock, live_price,
   passed, reason. Logs a recheck row (plus a rejected_option row if it fails).
-- `place_order(part_id, offer_id, qty, run_id, spend_limit=None) -> dict`: status
+- `place_order(part_id, offer_id, qty, run_id, spend_limit=None, limit_source=None) -> dict`: status
   (placed / pending_approval / refused / exists), po_id, reason. REFUSES unless the offer is
   eligible (R3, R4), qty is what evaluate_part says (R2), and a passing recheck of that same
   offer exists in this run's audit log (R5). Over the limit -> pending_approval (R6).

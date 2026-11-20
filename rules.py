@@ -32,19 +32,38 @@ import suppliers
 def get_spend_limit(override=None):
     """The one place the spending limit is read. override wins (sidebar box);
     otherwise Statsig via config_flags, otherwise SPEND_LIMIT in .env."""
+    return get_spend_limit_with_source(override)[0]
+
+
+def get_spend_limit_with_source(override=None):
+    """(limit, source). source is "app" (sidebar override), "Statsig", or ".env"
+    (the default), exactly as config_flags.get_live_limit() reports it."""
     if override is not None:
         limit = _valid_limit(override)
         if limit is None:
             raise ValueError(f"Spending limit must be a number of 0 or more (got {override!r})")
-        return limit
+        return limit, "app"
     try:
         from config_flags import get_live_limit
-        limit = _valid_limit(get_live_limit()[0])
+        value, source = get_live_limit()
+        limit = _valid_limit(value)
+        if limit is not None:
+            return limit, source
     except Exception:
-        limit = None
-    if limit is None:
-        limit = _valid_limit(os.getenv("SPEND_LIMIT", "1000"))
-    return 1000.0 if limit is None else limit
+        pass
+    limit = _valid_limit(os.getenv("SPEND_LIMIT", "1000"))
+    return (1000.0 if limit is None else limit), ".env"
+
+
+LIMIT_SOURCE_WORDS = {"Statsig": "set in Statsig", ".env": "the default limit", "app": "set in the app"}
+
+
+def _limit_phrase(total, limit, source):
+    """'Total $2,395 is over your $1,000 limit (set in Statsig), so it needs your approval.'"""
+    where = LIMIT_SOURCE_WORDS.get(source, source)
+    if total <= limit:                                                        # R6, same test as place_order
+        return f"Total {_money(total)} is within your {_money(limit)} limit ({where})."
+    return f"Total {_money(total)} is over your {_money(limit)} limit ({where}), so it needs your approval."
 
 
 def _valid_limit(value):
@@ -359,8 +378,11 @@ def _refuse(run_id, part_id, reason, data):
     return {"status": "refused", "po_id": None, "reason": reason}
 
 
-def place_order(part_id, offer_id, qty, run_id, spend_limit=None):
+def place_order(part_id, offer_id, qty, run_id, spend_limit=None, limit_source=None):
     """R3 to R7 enforced in code before anything is written.
+
+    limit_source: pass the source from get_spend_limit_with_source() when you
+    pass an already-resolved spend_limit, so the audit trail names it correctly.
 
     Returns {"status": "placed" | "pending_approval" | "refused" | "exists",
              "po_id", "reason", ...}.
@@ -370,8 +392,9 @@ def place_order(part_id, offer_id, qty, run_id, spend_limit=None):
     order_placed or approval_requested.
     """
     data = {"offer_id": offer_id, "qty": qty}
-    ev = _evaluate(part_id, spend_limit)
-    limit = ev["spend_limit"]
+    limit, source = get_spend_limit_with_source(spend_limit)
+    source = limit_source or source
+    ev = _evaluate(part_id, limit)
     key = idempotency_key(part_id)
 
     if ev["existing_order"]:                                                  # R7 check 1
@@ -418,7 +441,9 @@ def place_order(part_id, offer_id, qty, run_id, spend_limit=None):
         po_id = _next_po_id(conn)
         row_data = {"po_id": po_id, "idempotency_key": key, "supplier_id": offer["supplier_id"],
                     "offer_id": offer_id, "qty": qty, "unit_price": unit_price, "shipping": shipping,
-                    "total": total, "spend_limit": limit, "arrival": offer["arrival"]}
+                    "total": total, "spend_limit": limit, "spend_limit_source": source,
+                    "arrival": offer["arrival"]}
+        limit_text = _limit_phrase(total, limit, source)
         try:
             conn.execute(
                 "INSERT INTO purchase_orders (po_id, idempotency_key, part_id, supplier_id, offer_id, "
@@ -438,22 +463,20 @@ def place_order(part_id, offer_id, qty, run_id, spend_limit=None):
         audit.log(run_id, part_id, "chosen",
                   f"Chose {offer['supplier_name']}: {qty} x {_money(unit_price)} + "
                   f"{_money(shipping)} shipping = {_money(total)}, the lowest landed cost that arrives in time"
-                  f"{' and passed the recheck' if cheaper else ''}.{why}",
-                  {**row_data, "rule": "R4"}, conn=conn)
+                  f"{' and passed the recheck' if cheaper else ''}.{why} {limit_text}",
+                  {**row_data, "rule": "R4, R6"}, conn=conn)
         if status == "placed":
             conn.execute("UPDATE parts SET on_order = on_order + ? WHERE part_id = ?", (qty, part_id))
-            msg = (f"Placed {po_id} with {offer['supplier_name']}: {_money(total)}, within the "
-                   f"{_money(limit)} limit. {qty} added to on order.")
+            msg = f"Placed {po_id} with {offer['supplier_name']}. {limit_text} {qty} added to on order."
             audit.log(run_id, part_id, "order_placed", msg, {**row_data, "rule": "R6, R7"}, conn=conn)
         else:
-            msg = (f"{_money(total)} is over the {_money(limit)} spending limit. {po_id} with "
-                   f"{offer['supplier_name']} is waiting for the owner's approval.")
+            msg = f"{limit_text} {po_id} with {offer['supplier_name']} is waiting for the owner's approval."
             audit.log(run_id, part_id, "approval_requested", msg, {**row_data, "rule": "R6"}, conn=conn)
         conn.commit()
     finally:
         conn.close()
     return {"status": status, "po_id": po_id, "reason": msg, "total": total,
-            "spend_limit": limit, "supplier_id": offer["supplier_id"]}
+            "spend_limit": limit, "spend_limit_source": source, "supplier_id": offer["supplier_id"]}
 
 
 def _decide(po_id, new_status, approver):
@@ -505,9 +528,9 @@ def run_rules_only(spend_limit=None):
     "Simulated crash" when CRASH_AFTER_ORDERS is reached; everything written
     before stays."""
     run_id = start_run()
-    limit = get_spend_limit(spend_limit)      # once per run: one run never mixes two limits
+    limit, source = get_spend_limit_with_source(spend_limit)   # once per run: never mixes two limits
     crash_after = _crash_after()
-    summary = {"run_id": run_id, "spend_limit": limit, "today": db.today(),
+    summary = {"run_id": run_id, "spend_limit": limit, "spend_limit_source": source, "today": db.today(),
                "placed": [], "pending_approval": [], "skipped": [], "checked": [],
                "no_viable_offer": [], "refused": []}
 
@@ -529,7 +552,8 @@ def run_rules_only(spend_limit=None):
         for offer in ev["eligible_offers"]:
             if not recheck_offer(offer["offer_id"], ev["qty"], run_id)["passed"]:    # R5
                 continue
-            outcome = place_order(part_id, offer["offer_id"], ev["qty"], run_id, spend_limit=limit)["status"]
+            outcome = place_order(part_id, offer["offer_id"], ev["qty"], run_id,
+                                  spend_limit=limit, limit_source=source)["status"]
             break
         else:
             if ev["eligible_offers"]:
