@@ -90,8 +90,16 @@ INT_COLUMNS = {
 REAL_COLUMNS = {"suppliers": {"shipping_flat"}, "offers": {"unit_price"}}
 
 
-def connect():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+class DatabaseNotReady(RuntimeError):
+    pass
+
+
+def connect(create=False):
+    """Open parts_buyer.db. Never creates it by accident: only reset_demo() does."""
+    if not create and not DB_PATH.exists():
+        raise DatabaseNotReady("The demo data isn't loaded yet. Press Reset demo first.")
+    target = DB_PATH if create else f"{DB_PATH.as_uri()}?mode=rw"
+    conn = sqlite3.connect(target, timeout=10, uri=not create)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -115,7 +123,7 @@ def reset_demo():
     """Delete the database and rebuild it from data/*.csv."""
     if DB_PATH.exists():
         DB_PATH.unlink()
-    with connect() as conn:
+    with connect(create=True) as conn:
         conn.executescript(SCHEMA)
         for table in ("parts", "suppliers", "offers", "jobs"):
             _load_csv(conn, table)
