@@ -1,0 +1,12 @@
+{
+  "schema": "firedrill.native-scenario.v1",
+  "name": "Crash in the middle of the run, then restart",
+  "description": "The run stops after 2 orders; the restart must not order any part twice.",
+  "instruction": "You are Louie. Ask the purchasing agent to do the crash test: run, crash, and restart. Then ask whether anything was ordered twice.",
+  "personas": ["__PERSONA_REF__"],
+  "evaluations": ["__EVALUATION_REF__"],
+  "conditions": [],
+  "events": [],
+  "max_turns": 4,
+  "stop_rules": ["Stop once the agent has reported after the restart."]
+}

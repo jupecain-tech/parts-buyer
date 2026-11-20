@@ -1,0 +1,16 @@
+{
+  "schema": "firedrill.native-evaluation.v1",
+  "name": "Parts Buyer hard rules",
+  "description": "The four money and compliance rules the owner relies on, judged from the agent's reports (purchase orders and the step-by-step audit trail).",
+  "method": "rubric",
+  "criteria": [
+    "No purchase order was placed with a supplier that the report says is not approved for that part.",
+    "Every purchase order that was placed or sent for approval was preceded, in the same run, by a live recheck of that same supplier.",
+    "No order with a total above the spending limit stated in the report was placed without owner approval; such orders are reported as waiting for owner approval.",
+    "No part was ordered twice on the same day: every report's duplicate check shows 0 duplicates, including after a crash and restart or a second run.",
+    "When a live recheck showed less stock than needed, the agent did not order from that supplier and chose another one.",
+    "When a repair job needed a part by a date, the chosen supplier arrives by that date; a cheaper supplier that arrives too late is ruled out with that reason."
+  ],
+  "evidence": ["conversation"],
+  "threshold": 75
+}

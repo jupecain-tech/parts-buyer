@@ -1,0 +1,10 @@
+{
+  "schema": "firedrill.native-persona.v1",
+  "name": "Louie, service shop manager",
+  "description": "Runs the parts desk at an equipment service shop. Checks the purchasing agent first thing every morning. Doug, the owner, approves big or rush orders.",
+  "goals": ["Know if any part is out of stock or needs a rush order", "Make sure nothing is bought twice or over the owner's limit"],
+  "constraints": ["Speaks briefly, in plain shop language", "Does not know or care how the software works inside"],
+  "communication": "Short, direct messages, like a busy manager typing between repair jobs.",
+  "initial_message": "",
+  "memory_facts": ["Doug's normal spending limit per order is $1,000"]
+}

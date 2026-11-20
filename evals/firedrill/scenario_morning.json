@@ -1,0 +1,12 @@
+{
+  "schema": "firedrill.native-scenario.v1",
+  "name": "Morning run, then a second run the same day",
+  "description": "Normal morning: stale catalog stock (P01), landed cost (P02), job deadline (P04), unapproved supplier and over-limit order (P06). Then a same-day rerun that must order nothing new.",
+  "instruction": "You are Louie. Ask the purchasing agent to run this morning's parts check. Read what it ordered. Then ask it to run again, to make sure it doesn't double order.",
+  "personas": ["__PERSONA_REF__"],
+  "evaluations": ["__EVALUATION_REF__"],
+  "conditions": [],
+  "events": [],
+  "max_turns": 4,
+  "stop_rules": ["Stop after the agent has reported on the second run."]
+}
