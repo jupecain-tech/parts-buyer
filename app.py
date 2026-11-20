@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 DB_PATH = ROOT / "parts_buyer.db"
 TODAY = os.getenv("TODAY", "2026-11-20")
+USE_STATSIG = os.getenv("USE_STATSIG", "0").strip() == "1"
 
 st.set_page_config(page_title="Parts Buyer", page_icon="🔧", layout="wide")
 
@@ -93,7 +94,25 @@ with st.sidebar:
     st.title("Parts Buyer")
     st.caption("Your shop's purchasing agent, with receipts")
     st.text_input("Today", value=TODAY, disabled=True)
-    spend_limit = st.number_input("Spending limit ($)", min_value=0, value=1000, step=100)
+    if USE_STATSIG:
+        # Owner sets the limit in the Statsig console; rules.py fetches it on each run.
+        try:
+            from config_flags import get_live_limit
+
+            spend_limit, limit_source = get_live_limit()
+        except Exception as exc:
+            spend_limit, limit_source = float(os.getenv("SPEND_LIMIT", "1000")), ".env"
+            st.warning(f"backend not ready: config_flags ({exc})")
+        run_limit = None
+        with st.container(border=True):
+            st.markdown("**Live rules**")
+            st.markdown(f"Spending limit: **{money(spend_limit)}**")
+            st.caption(f"Source: {limit_source}")
+            if limit_source != "Statsig":
+                st.caption(":orange[Statsig not reachable, using .env]")
+    else:
+        spend_limit = st.number_input("Spending limit ($)", min_value=0, value=1000, step=100)
+        run_limit = spend_limit
     mode = st.radio("Mode", ["Agent", "Rules only"], horizontal=True)
     crash_test = st.toggle("Crash test", help="Stops the run on purpose after 2 orders.")
     run_clicked = st.button("Run agent", type="primary", width="stretch")
@@ -123,9 +142,9 @@ if run_clicked:
         try:
             with st.spinner("Running..."):
                 if module == "agent":
-                    result = backend["agent"].run_agent(spend_limit=spend_limit)
+                    result = backend["agent"].run_agent(spend_limit=run_limit)
                 else:
-                    result = backend["rules"].run_rules_only(spend_limit=spend_limit)
+                    result = backend["rules"].run_rules_only(spend_limit=run_limit)
             st.session_state["flash"] = ("success", "Run finished.")
             st.session_state["last_result"] = result
         except Exception as exc:
