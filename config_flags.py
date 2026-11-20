@@ -14,6 +14,7 @@ SDK: statsig-python-core (import statsig_python_core).
 """
 
 import logging
+import math
 import os
 import threading
 import time
@@ -48,7 +49,8 @@ def _sponsor_error(reason):
 
 def _env_limit():
     try:
-        return float(os.getenv("SPEND_LIMIT", "1000"))
+        value = float(os.getenv("SPEND_LIMIT", "1000"))
+        return value if math.isfinite(value) and value >= 0 else 1000.0
     except ValueError:
         return 1000.0
 
@@ -113,8 +115,8 @@ def get_live_limit():
             _sponsor_error(f"{CONFIG_NAME}.{FIELD} not found (reason {reason or 'unknown'})")
             return fallback
         value = float(values[FIELD])
-        if value < 0:
-            _sponsor_error(f"{CONFIG_NAME}.{FIELD} is negative ({value})")
+        if not math.isfinite(value) or value < 0:
+            _sponsor_error(f"{CONFIG_NAME}.{FIELD} must be a number of 0 or more (got {value})")
             return fallback
         return value, "Statsig"
     except Exception as exc:

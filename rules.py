@@ -18,6 +18,7 @@ Public API (also listed in CLAUDE.md):
 """
 
 import json
+import math
 import os
 import sqlite3
 from datetime import date, timedelta
@@ -32,12 +33,27 @@ def get_spend_limit(override=None):
     """The one place the spending limit is read. override wins (sidebar box);
     otherwise Statsig via config_flags, otherwise SPEND_LIMIT in .env."""
     if override is not None:
-        return float(override)
+        limit = _valid_limit(override)
+        if limit is None:
+            raise ValueError(f"Spending limit must be a number of 0 or more (got {override!r})")
+        return limit
     try:
         from config_flags import get_live_limit
-        return float(get_live_limit()[0])
+        limit = _valid_limit(get_live_limit()[0])
     except Exception:
-        return float(os.getenv("SPEND_LIMIT", "1000"))
+        limit = None
+    if limit is None:
+        limit = _valid_limit(os.getenv("SPEND_LIMIT", "1000"))
+    return 1000.0 if limit is None else limit
+
+
+def _valid_limit(value):
+    """A spending limit must be a real number, 0 or more. Returns None otherwise."""
+    try:
+        limit = float(value)
+    except (TypeError, ValueError):
+        return None
+    return limit if math.isfinite(limit) and limit >= 0 else None
 
 
 def _crash_after():
