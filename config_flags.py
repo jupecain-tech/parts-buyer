@@ -16,6 +16,7 @@ SDK: statsig-python-core (import statsig_python_core).
 import logging
 import math
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -42,6 +43,12 @@ _last_error = None
 def _sponsor_error(reason):
     """Log once per distinct reason so a dead network doesn't flood the console."""
     global _last_error
+    # The SDK's error text includes the download URL, which carries part of the secret key.
+    reason = re.sub(r"https?://\S+", "<statsig url>", str(reason))
+    reason = re.sub(r"secret-[\w*.-]+", "<secret>", reason)
+    secret = os.getenv("STATSIG_SERVER_SECRET", "").strip()
+    if secret:
+        reason = reason.replace(secret, "<secret>")
     if reason != _last_error:
         log.warning("sponsor_error: statsig: %s", reason)
         _last_error = reason
