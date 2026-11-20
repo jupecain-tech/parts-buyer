@@ -271,9 +271,34 @@ with tab_appr:
                 r.button("Reject", key=f"reject_{po['po_id']}", disabled=not rules_ready,
                          on_click=decide, args=("reject", po["po_id"], pid))
 
-# Orders (next step)
+# Orders
+STATUS_LABELS = {"placed": "Placed", "pending_approval": "Awaiting approval", "rejected": "Rejected"}
+
 with tab_orders:
-    st.caption("Coming next: every purchase order, newest first.")
+    if not db_ready:
+        st.info("Press Reset demo")
+    elif orders is None:
+        st.warning("backend not ready: purchase orders table")
+    elif orders.empty:
+        st.caption("No orders yet. Press Run agent.")
+    else:
+        po_table = orders.sort_values(["created_at", "po_id"], ascending=False)
+        po_table = pd.DataFrame(
+            {
+                "PO": po_table["po_id"],
+                "Part": [f"{p} {part_names.get(p, '')}".strip() for p in po_table["part_id"]],
+                "Supplier": [supplier_label(s) for s in po_table["supplier_id"]],
+                "Qty": po_table["qty"],
+                "Unit price": po_table["unit_price"].map(money),
+                "Shipping": po_table["shipping"].map(money),
+                "Total": po_table["total"].map(money),
+                "Status": po_table["status"].map(lambda s: STATUS_LABELS.get(s, s)),
+                "Approved by": po_table["approved_by"].fillna(""),
+                "Created": po_table["created_at"],
+                "Order key": po_table["idempotency_key"],
+            }
+        )
+        st.dataframe(po_table, hide_index=True, width="stretch")
 
 # Audit trail
 with tab_audit:
