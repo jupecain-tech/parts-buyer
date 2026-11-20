@@ -1,5 +1,7 @@
 # For Shuhang: live spending limit (Statsig)
 
+> **Update:** rules.py is done (Mike took it over), including `get_spend_limit`. Only section 3 (agent.py) below still applies to you. The full backend API is in CLAUDE.md.
+
 Mike's `config_flags.py` is in the repo. It exposes `get_live_limit()`, which returns
 `(value, source)`, with `source` either `"Statsig"` or `".env"`. It never raises.
 When `USE_STATSIG=1`, the app calls your run functions with `spend_limit=None`,
