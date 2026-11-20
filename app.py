@@ -69,6 +69,8 @@ STEP_LABELS = {
     "order_placed": "Order placed",
     "approval_requested": "Asked the owner",
     "approved": "Approved",
+    "rejected": "Owner rejected",
+    "refused": "Order refused",
     "skipped": "Skipped",
     "no_viable_offer": "No offer works",
     "agent_note": "Agent's explanation",
@@ -195,9 +197,10 @@ def supplier_label(sid):
     return str(supplier_names.get(sid, sid)).replace(" (mock)", "")
 
 # Top row of numbers
-if audit is not None and not audit.empty:
-    latest_run = audit["run_id"].iloc[-1]
-    parts_checked = audit.loc[audit["run_id"] == latest_run, "part_id"].dropna().nunique()
+runs = audit[~audit["run_id"].astype(str).str.startswith("owner-")] if audit is not None else None
+if runs is not None and not runs.empty:
+    latest_run = runs["run_id"].iloc[-1]  # owner approvals are not runs
+    parts_checked = runs.loc[runs["run_id"] == latest_run, "part_id"].dropna().nunique()
 else:
     parts_checked = 0
 if orders is not None and not orders.empty:
