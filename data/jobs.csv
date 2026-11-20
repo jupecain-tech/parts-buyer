@@ -1,0 +1,5 @@
+job_id,customer,part_id,qty,due_date
+J1,Valley Surgical (mock),P01,2,2026-11-27
+J2,Bayside Ortho (mock),P04,1,2026-11-23
+J3,Redwood ASC (mock),P06,1,2026-12-02
+J4,Marin Endoscopy (mock),P03,1,2026-11-25

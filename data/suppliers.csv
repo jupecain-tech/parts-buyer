@@ -1,0 +1,4 @@
+supplier_id,name,country,lead_time_days,shipping_flat
+OEMD,OEM Direct (mock),US,2,25
+BRKA,Broker A (mock),US,5,15
+BRKB,Broker B (mock),UK,10,60
