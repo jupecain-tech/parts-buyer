@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "descriptor_sha256": "__DESCRIPTOR_SHA256__",
+  "roots": [{"alias": "app", "path": "/Users/jupecain/Downloads/parts-buyer", "identity_sha256": "200cdbf4fbf6d9d1e6dad90872c2a70fea1b26c54510f6f1c9770335f70a084d"}],
+  "services": [{
+    "alias": "agent", "root_alias": "app", "mode": "launch",
+    "command": {"executable": "/Users/jupecain/Downloads/parts-buyer/.venv/bin/python", "args": ["evals/firedrill/parts_buyer_drill.py"]},
+    "cwd": ".", "env_passthrough": [], "env_static": {"USE_STATSIG": "0", "CRASH_AFTER_ORDERS": "0"},
+    "local_secret_env": [], "readiness": {"kind": "stdout", "pattern": "READY"},
+    "readiness_timeout_ms": 30000, "stop_timeout_ms": 5000, "per_drill": true, "port_env": null
+  }],
+  "driver": {"profile": "jsonl-process.v1", "service_alias": "agent"},
+  "state_hooks": [],
+  "max_parallel_drills": 1
+}
